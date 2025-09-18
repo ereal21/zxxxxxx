@@ -44,6 +44,9 @@ def register_other_handlers(dp: Dispatcher) -> None:
             user_record = None
 
         if is_opted_in(uid) and user_record:
+
+        # If user already verified, skip captcha and show main menu
+        if is_opted_in(uid):
             # Lazy import to avoid circulars
             try:
                 from bot.handlers.user.main import start as user_start
