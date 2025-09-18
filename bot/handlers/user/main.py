@@ -940,6 +940,39 @@ async def checking_payment(call: CallbackQuery):
         await call.answer(text='❌ Invoice not found')
 
 
+async def _cancel_invoice_and_cleanup(
+    call: CallbackQuery,
+    bot,
+    user_id: int,
+    invoice_id: str,
+    lang: str,
+    info: tuple[int, int, int | None] | None = None,
+) -> None:
+    """Delete invoice artifacts and release any reserved state."""
+
+    record = info if info is not None else get_unfinished_operation(invoice_id)
+    if record:
+        _, _, msg_id = record
+        finish_operation(invoice_id)
+        if msg_id:
+            with suppress(MessageCantBeDeleted, MessageToDeleteNotFound, Exception):
+                await bot.delete_message(call.message.chat.id, msg_id)
+
+    context = TgConfig.STATE.pop(f'invoice_ctx_{invoice_id}', None)
+    for key in (
+        f'{user_id}_invoice_for_purchase',
+        f'{user_id}_amount',
+        f'{user_id}_pending_item',
+        f'{user_id}_price',
+    ):
+        TgConfig.STATE.pop(key, None)
+
+    with suppress(MessageCantBeDeleted, MessageToDeleteNotFound, Exception):
+        await bot.delete_message(call.message.chat.id, call.message.message_id)
+
+    await _notify_invoice_cancelled(bot, user_id, lang, context)
+
+
 async def cancel_payment(call: CallbackQuery):
     bot, user_id = await get_bot_user_ids(call)
     invoice_id = call.data.split('_', 1)[1]
@@ -956,7 +989,8 @@ async def cancel_payment(call: CallbackQuery):
         else:
             await bot.edit_message_caption(caption=prompt, **kwargs)
     else:
-        await call.answer(text='❌ Invoice not found')
+        await call.answer()
+        await _cancel_invoice_and_cleanup(call, bot, user_id, invoice_id, lang)
 
 
 
@@ -966,21 +1000,8 @@ async def confirm_cancel_payment(call: CallbackQuery):
     lang = get_user_language(user_id) or 'en'
 
     info = get_unfinished_operation(invoice_id)
-    if info:
-        _, _, msg_id = info
-        finish_operation(invoice_id)
-        if msg_id:
-            with suppress(MessageCantBeDeleted, MessageToDeleteNotFound, Exception):
-                await bot.delete_message(call.message.chat.id, msg_id)
-
-    context = TgConfig.STATE.pop(f'invoice_ctx_{invoice_id}', None)
-    for key in (f'{user_id}_invoice_for_purchase', f'{user_id}_amount', f'{user_id}_pending_item', f'{user_id}_price'):
-        TgConfig.STATE.pop(key, None)
-
-    with suppress(MessageCantBeDeleted, MessageToDeleteNotFound, Exception):
-        await bot.delete_message(call.message.chat.id, call.message.message_id)
-
-    await _notify_invoice_cancelled(bot, user_id, lang, context)
+    await _cancel_invoice_and_cleanup(call, bot, user_id, invoice_id, lang, info)
+    await call.answer()
 
 async def change_language(call: CallbackQuery):
     bot, user_id = await get_bot_user_ids(call)
