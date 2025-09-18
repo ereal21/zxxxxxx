@@ -72,6 +72,9 @@ async def _notify_invoice_cancelled(bot, user_id: int, lang: str, context: dict 
         item_name = context.get('item')
         price = context.get('price')
         if item_name and price is not None:
+            # Restore pending purchase context so follow-up buttons work again.
+            TgConfig.STATE[f'{user_id}_pending_item'] = item_name
+            TgConfig.STATE[f'{user_id}_price'] = price
             balance = get_user_balance(user_id) or 0
             shortfall = _compute_shortfall(price, balance)
             price_text = format_amount(price)

@@ -31,6 +31,20 @@ def register_other_handlers(dp: Dispatcher) -> None:
     @dp.message_handler(commands=["start"])
     async def start_cmd(message: types.Message):
         uid = message.from_user.id
+
+        # Treat user as verified only if they explicitly opted-in and we
+        # still have a database record for them. This prevents situations
+        # where the consent file survives but the database was reset,
+        # leaving newcomers stuck without a captcha challenge.
+        user_record = None
+        try:
+            from bot.database.methods import check_user  # lazy to avoid circulars
+            user_record = check_user(uid)
+        except Exception:
+            user_record = None
+
+        if is_opted_in(uid) and user_record:
+
         # If user already verified, skip captcha and show main menu
         if is_opted_in(uid):
             # Lazy import to avoid circulars
@@ -43,13 +57,13 @@ def register_other_handlers(dp: Dispatcher) -> None:
             await message.answer("✅ You're already verified. Welcome back!")
             return
 
-        # First-time: generate and ask for captcha
+        # First-time (or missing DB record): generate and ask for captcha
         img_bytes, answer = generate_captcha()
         TgConfig.STATE[f"captcha_expected_{uid}"] = answer
         TgConfig.STATE[f"captcha_attempts_{uid}"] = 0
         await message.answer_photo(
-        types.InputFile(io.BytesIO(img_bytes), filename="captcha.png"),
-        caption="🤖 Prove you're human: reply with the text in the image."
+            types.InputFile(io.BytesIO(img_bytes), filename="captcha.png"),
+            caption="🤖 Prove you're human: reply with the text in the image.",
         )
 
 
