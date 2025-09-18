@@ -33,15 +33,15 @@ def register_other_handlers(dp: Dispatcher) -> None:
         uid = message.from_user.id
         # If user already verified, skip captcha and show main menu
         if is_opted_in(uid):
-        # Lazy import to avoid circulars
-        try:
-            from bot.handlers.user.main import start as user_start
-            await user_start(message)
+            # Lazy import to avoid circulars
+            try:
+                from bot.handlers.user.main import start as user_start
+                await user_start(message)
+                return
+            except Exception:
+                pass  # fallback to simple greeting if import fails
+            await message.answer("✅ You're already verified. Welcome back!")
             return
-        except Exception:
-            pass  # fallback to simple greeting if import fails
-        await message.answer("✅ You're already verified. Welcome back!")
-        return
 
         # First-time: generate and ask for captcha
         img_bytes, answer = generate_captcha()
